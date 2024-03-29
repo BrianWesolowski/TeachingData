@@ -1,0 +1,53 @@
+# Function to generate data for one sample t-test
+generate_ttest_data <- function(cont_mean, cont_sd, cat_levels, cat_prob, sample_size) {
+  # Generate continuous data
+  continuous_data <- rnorm(sample_size, mean = cont_mean, sd = cont_sd)
+  
+  # Generate categorical data
+  categorical_data <- sample(cat_levels, size = sample_size, replace = TRUE, prob = cat_prob)
+  
+  # Return a list containing both vectors
+  return(list(continuous_data, categorical_data))
+}
+
+# Function to perform one-sample t-test
+one_sample_t_test <- function(continuous_data, categorical_data, mu, alpha) {
+  # Perform one-sample t-test
+  t_test_result <- t.test(continuous_data, mu = mu)
+  
+  # Calculate Cohen's d effect size
+  mean_diff <- mean(continuous_data) - mu
+  pooled_sd <- sqrt(((length(continuous_data) - 1) * var(continuous_data) + (length(categorical_data) - 1) * var(categorical_data)) / (length(continuous_data) + length(categorical_data) - 2))
+  cohens_d <- mean_diff / pooled_sd
+  
+  # Output results
+  cat("One-Sample t-test Results:\n")
+  cat("t-value:", t_test_result$statistic, "\n")
+  cat("Degrees of Freedom:", t_test_result$parameter, "\n")
+  cat("p-value:", t_test_result$p.value, "\n")
+  cat("Cohen's d effect size:", cohens_d, "\n")
+  
+  # Check if p-value is less than alpha
+  if (t_test_result$p.value < alpha) {
+    cat("Reject the null hypothesis (p < alpha)\n")
+  } else {
+    cat("Fail to reject the null hypothesis (p >= alpha)\n")
+  }
+}
+
+# Example usage:
+cont_mean <- 10
+cont_sd <- 2
+cat_levels <- c("A", "B")
+cat_prob <- c(0.6, 0.4) # Probability for each category level
+sample_size <- 50
+mu <- 9 # Population mean for the null hypothesis
+alpha <- 0.05
+
+# Generate data
+data <- generate_ttest_data(cont_mean, cont_sd, cat_levels, cat_prob, sample_size)
+continuous_data <- data[[1]]
+categorical_data <- data[[2]]
+
+# Perform one-sample t-test
+one_sample_t_test(continuous_data, categorical_data, mu, alpha)
