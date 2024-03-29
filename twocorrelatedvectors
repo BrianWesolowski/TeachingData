@@ -1,0 +1,30 @@
+# Generate two correlated vectors by specifying (a) correlation value, (b) range for both vectors, and (c) sample size
+
+library(MASS)
+
+generate_correlated_vectors <- function(correlation, range_vector1, range_vector2, sample_size) {
+  # Generate covariance matrix
+  covariance_matrix <- matrix(c(range_vector1[2]^2, correlation * range_vector1[2] * range_vector2[2],
+                                correlation * range_vector1[2] * range_vector2[2], range_vector2[2]^2), 
+                              nrow = 2, ncol = 2)
+  
+  # Generate correlated vectors
+  correlated_vectors <- mvrnorm(n = sample_size, mu = c(0, 0), Sigma = covariance_matrix)
+  
+  # Scale and shift vectors to specified ranges
+  scaled_vector1 <- scale(correlated_vectors[, 1], center = TRUE, scale = TRUE)
+  scaled_vector1 <- rescale(scaled_vector1, to = range_vector1)
+  
+  scaled_vector2 <- scale(correlated_vectors[, 2], center = TRUE, scale = TRUE)
+  scaled_vector2 <- rescale(scaled_vector2, to = range_vector2)
+  
+  return(list(vector1 = scaled_vector1, vector2 = scaled_vector2))
+}
+
+# Example usage
+correlation_value <- 0.7
+range_vector1 <- c(0, 100)  # Example range for vector 1
+range_vector2 <- c(0, 200)  # Example range for vector 2
+sample_size <- 1000  # Example sample size
+
+correlated_vectors <- generate_correlated_vectors(correlation_value, range_vector1, range_vector2, sample_size)
