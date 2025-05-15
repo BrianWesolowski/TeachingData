@@ -1,0 +1,44 @@
+# Set seed for reproducibility
+set.seed(123)
+
+# Define the number of levels for each factor and sample size per group
+n_per_group <- 20  # Sample size per group
+factor_A_levels <- c("Level 1", "Level 2")  # Factor A (e.g., Gender)
+factor_B_levels <- c("Level A", "Level B", "Level C")  # Factor B (e.g., Treatment)
+factor_C_levels <- c("Condition X", "Condition Y")  # Factor C (e.g., Environment)
+
+# Generate a full factorial design
+design <- expand.grid(
+  Factor_A = factor_A_levels,
+  Factor_B = factor_B_levels,
+  Factor_C = factor_C_levels
+)
+
+# Create an empty vector to store scores
+scores <- numeric()
+
+# Loop through each combination of factors and generate data
+for (i in 1:nrow(design)) {
+  mean_score <- 50 + 5 * (design$Factor_A[i] == "Level 2") + 
+    5 * (design$Factor_B[i] == "Level B") - 
+    5 * (design$Factor_C[i] == "Condition Y")  # Example means
+  scores <- c(scores, rnorm(n_per_group, mean = mean_score, sd = 10))
+}
+
+# Create the dataset
+data <- data.frame(
+  Score = scores,
+  Factor_A = factor(rep(design$Factor_A, each = n_per_group)),
+  Factor_B = factor(rep(design$Factor_B, each = n_per_group)),
+  Factor_C = factor(rep(design$Factor_C, each = n_per_group))
+)
+
+# Print the first few rows of the data
+head(data)
+
+# Save the data to a CSV file (optional)
+write.csv(data, "three_way_anova_data.csv", row.names = FALSE)
+
+# Perform a three-way ANOVA
+anova_result <- aov(Score ~ Factor_A * Factor_B * Factor_C, data = data)
+summary(anova_result)
