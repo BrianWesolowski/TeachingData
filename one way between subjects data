@@ -1,0 +1,27 @@
+# Set seed for reproducibility
+set.seed(123)
+
+# Define the number of groups and sample size per group
+groups <- c("Group A", "Group B", "Group C")
+n_per_group <- 20
+
+# Generate data for each group
+group_a <- rnorm(n_per_group, mean = 50, sd = 10)  # Group A with mean=50, sd=10
+group_b <- rnorm(n_per_group, mean = 55, sd = 10)  # Group B with mean=55, sd=10
+group_c <- rnorm(n_per_group, mean = 60, sd = 10)  # Group C with mean=60, sd=10
+
+# Combine data into a single data frame
+data <- data.frame(
+  Score = c(group_a, group_b, group_c),
+  Group = factor(rep(groups, each = n_per_group))
+)
+
+# Print the first few rows of the data
+head(data)
+
+# Save the data to a CSV file (optional)
+write.csv(data, "anova_data.csv", row.names = FALSE)
+
+# Perform a one-way ANOVA
+anova_result <- aov(Score ~ Group, data = data)
+summary(anova_result)
