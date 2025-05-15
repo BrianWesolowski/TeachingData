@@ -1,0 +1,30 @@
+# Set seed for reproducibility
+set.seed(123)
+
+# Define the number of observations
+n <- 100
+
+# Generate the independent variable (x)
+x <- rnorm(n, mean = 50, sd = 10)
+
+# Define the relationship between x and y (y = 2x + noise)
+slope <- 2
+intercept <- 5
+noise <- rnorm(n, mean = 0, sd = 5)
+y <- intercept + slope * x + noise
+
+# Combine data into a data frame
+data <- data.frame(
+  x = x,
+  y = y
+)
+
+# Print the first few rows of the data
+head(data)
+
+# Save the data to a CSV file (optional)
+write.csv(data, "linear_regression_data.csv", row.names = FALSE)
+
+# Perform a simple linear regression
+lm_result <- lm(y ~ x, data = data)
+summary(lm_result)
