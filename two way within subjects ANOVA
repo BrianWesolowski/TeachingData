@@ -1,0 +1,41 @@
+# Set seed for reproducibility
+set.seed(123)
+
+# Define the levels for the two factors
+factor1_levels <- c("Factor1_Level1", "Factor1_Level2")  # First independent variable
+factor2_levels <- c("Factor2_Level1", "Factor2_Level2", "Factor2_Level3")  # Second independent variable
+
+# Define the sample size per group
+n_per_group <- 15
+
+# Create an empty data frame to store the data
+data <- data.frame(
+  Score = numeric(),
+  Factor1 = factor(),
+  Factor2 = factor()
+)
+
+# Generate data for each combination of levels
+for (f1 in factor1_levels) {
+  for (f2 in factor2_levels) {
+    # Generate random data with different means for each group
+    group_data <- rnorm(n_per_group, mean = sample(50:70, 1), sd = 10)
+    
+    # Combine into the data frame
+    data <- rbind(data, data.frame(
+      Score = group_data,
+      Factor1 = factor(f1, levels = factor1_levels),
+      Factor2 = factor(f2, levels = factor2_levels)
+    ))
+  }
+}
+
+# Print the first few rows of the dataset
+head(data)
+
+# Save the data to a CSV file (optional)
+write.csv(data, "two_way_anova_data.csv", row.names = FALSE)
+
+# Perform a two-way ANOVA
+anova_result <- aov(Score ~ Factor1 * Factor2, data = data)
+summary(anova_result)
