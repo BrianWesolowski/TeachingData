@@ -1,0 +1,38 @@
+# Set seed for reproducibility
+set.seed(123)
+
+# Define the number of participants and levels for each factor
+n_participants <- 20  # Number of participants
+levels_A <- c("A1", "A2")  # Levels of Factor A
+levels_B <- c("B1", "B2")  # Levels of Factor B
+levels_C <- c("C1", "C2")  # Levels of Factor C
+
+# Create a data frame for all combinations of factors and participants
+data <- expand.grid(
+  Participant = factor(1:n_participants),
+  Factor_A = factor(levels_A),
+  Factor_B = factor(levels_B),
+  Factor_C = factor(levels_C)
+)
+
+# Generate random scores for each combination
+data$Score <- rnorm(nrow(data), mean = 50, sd = 10)
+
+# Print the first few rows of the data
+head(data)
+
+# Save the data to a CSV file (optional)
+write.csv(data, "three_way_anova_data.csv", row.names = FALSE)
+
+# Perform a three-way within-subjects ANOVA
+# Convert the data to long format for repeated measures ANOVA
+library(ez)
+anova_result <- ezANOVA(
+  data = data,
+  dv = .(Score),  # Dependent variable
+  wid = .(Participant),  # Subject ID
+  within = .(Factor_A, Factor_B, Factor_C)  # Within-subject factors
+)
+
+# Print the ANOVA result
+print(anova_result)
