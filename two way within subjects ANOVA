@@ -1,0 +1,35 @@
+# Set seed for reproducibility
+set.seed(123)
+
+# Define the number of subjects and levels for the two factors
+n_subjects <- 20  # Number of subjects
+factor1_levels <- c("Condition A", "Condition B")  # First factor (e.g., within subjects)
+factor2_levels <- c("Time 1", "Time 2")  # Second factor (e.g., within subjects)
+
+# Generate data for each combination of factors
+data <- expand.grid(
+  Subject = factor(1:n_subjects),
+  Factor1 = factor(factor1_levels),
+  Factor2 = factor(factor2_levels)
+)
+
+# Simulate scores with some random variation
+# Adjust means for different levels of Factor1 and Factor2
+data$Score <- with(data, 
+  ifelse(Factor1 == "Condition A" & Factor2 == "Time 1", rnorm(n_subjects, mean = 50, sd = 5),
+  ifelse(Factor1 == "Condition A" & Factor2 == "Time 2", rnorm(n_subjects, mean = 55, sd = 5),
+  ifelse(Factor1 == "Condition B" & Factor2 == "Time 1", rnorm(n_subjects, mean = 60, sd = 5),
+         rnorm(n_subjects, mean = 65, sd = 5)
+  )))
+)
+
+# Print the first few rows of the data
+head(data)
+
+# Save the data to a CSV file (optional)
+write.csv(data, "two_way_within_subjects_anova_data.csv", row.names = FALSE)
+
+# Perform a two-way within-subjects ANOVA
+# Using `aov` with Error term to account for within-subjects design
+anova_result <- aov(Score ~ Factor1 * Factor2 + Error(Subject/(Factor1*Factor2)), data = data)
+summary(anova_result)
