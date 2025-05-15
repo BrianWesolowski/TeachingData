@@ -1,0 +1,37 @@
+# Set seed for reproducibility
+set.seed(123)
+
+# Define the number of conditions and sample size per subject
+conditions <- c("Condition 1", "Condition 2", "Condition 3")
+n_subjects <- 20
+
+# Generate data for each condition
+condition1 <- rnorm(n_subjects, mean = 50, sd = 10)  # Condition 1 with mean=50, sd=10
+condition2 <- rnorm(n_subjects, mean = 55, sd = 10)  # Condition 2 with mean=55, sd=10
+condition3 <- rnorm(n_subjects, mean = 60, sd = 10)  # Condition 3 with mean=60, sd=10
+
+# Combine data into a single data frame
+data <- data.frame(
+  Score = c(condition1, condition2, condition3),
+  Condition = factor(rep(conditions, each = n_subjects)),
+  Subject = factor(rep(1:n_subjects, times = length(conditions)))
+)
+
+# Print the first few rows of the data
+head(data)
+
+# Save the data to a CSV file (optional)
+write.csv(data, "within_subjects_anova_data.csv", row.names = FALSE)
+
+# Perform a one-way within-subjects ANOVA
+library(ez)
+anova_result <- ezANOVA(
+  data = data,
+  dv = .(Score),
+  wid = .(Subject),
+  within = .(Condition),
+  type = 3
+)
+
+# Print the ANOVA result
+anova_result
