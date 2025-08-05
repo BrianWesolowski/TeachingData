@@ -1,0 +1,179 @@
+# Set seed for reproducibility
+set.seed(1111)
+
+# Parameters
+n_performers <- 120  # Number of students (performers)
+n_criteria <- 30     # Number of criteria (items)
+n_raters <- 20       # Number of raters
+n_categories <- 4    # Rating scale categories (A, B, C, D)
+options <- c("A", "B", "C", "D")  # Response categories
+performers_per_rater <- 6  # Performances per rater
+overlap <- 3               # Overlap between consecutive raters
+n_misfit <- 8             # Number of misfitting performers
+n_drf_items <- 6          # Number of items with DRF (2 per domain)
+n_drf_raters <- 4         # Number of raters exhibiting DRF
+
+# Define facet labels
+performer_ids <- paste0("P", 1:n_performers)
+criteria_ids <- paste0("C", 1:n_criteria)
+rater_ids <- paste0("R", 1:n_raters)
+
+# Define domain structure for criteria (for interpretability)
+domains <- rep(c("Domain1", "Domain2", "Domain3"), each = 10)
+
+# Select items and raters for DRF
+drf_items <- c(sample(1:10, 2), sample(11:20, 2), sample(21:30, 2))  # 2 DRF items per domain
+drf_raters <- rater_ids[1:n_drf_raters]  # First 4 raters exhibit DRF
+
+# Simulate facet parameters
+theta <- rnorm(n_performers, mean = 0, sd = 1)  # Performer abilities (logit scale)
+beta <- rnorm(n_criteria, mean = 0, sd = 0.8)   # Criteria difficulties (logit scale)
+gamma <- rnorm(n_raters, mean = 0, sd = 0.5)    # Rater severities (logit scale)
+
+# Introduce DRF: Adjust severity for specific rater-item combinations
+drf_effect <- 1.0  # DRF effect size (logit scale, increased severity for DRF raters on DRF items)
+gamma_drf <- matrix(gamma, nrow = n_raters, ncol = n_criteria, byrow = FALSE)
+for (r in drf_raters) {
+  r_idx <- which(rater_ids == r)
+  gamma_drf[r_idx, drf_items] <- gamma[r_idx] + drf_effect  # Increase severity for DRF items
+}
+
+# Define rating scale thresholds (shared across criteria for RSM)
+# Closely spaced to warrant collapsing
+thresholds <- c(-0.4, 0.2, 0.7)  # Thresholds between A-B, B-C, C-D (logit scale)
+
+# Generate rater assignments with overlap
+rater_assignments <- list()
+for (r in 1:n_raters) {
+  start <- 1 + (r - 1) * (performers_per_rater - overlap)
+  end <- start + performers_per_rater - 1
+  if (end > n_performers) {
+    end <- n_performers
+    start <- max(1, end - performers_per_rater + 1)
+  }
+  rater_assignments[[r]] <- performer_ids[start:end]
+}
+names(rater_assignments) <- rater_ids
+
+# Create dataset (long format for MFRM)
+dataset <- data.frame(
+  Performer = character(),
+  Criterion = character(),
+  Rater = character(),
+  Response = character(),
+  stringsAsFactors = FALSE
+)
+
+# Generate MFRM responses with DRF
+for (r in 1:n_raters) {
+  performers <- rater_assignments[[r]]
+  for (p in performers) {
+    p_idx <- which(performer_ids == p)
+    for (c in 1:n_criteria) {
+      # Use DRF-adjusted rater severity
+      eta <- theta[p_idx] - beta[c] - gamma_drf[r, c]
+      # Probabilities for each category
+      probs <- numeric(n_categories)
+      for (k in 1:n_categories) {
+        num <- exp(sum(thresholds[1:(k-1)] - eta))
+        denom <- sum(exp(cumsum(thresholds - eta)))
+        probs[k] <- num / (1 + denom)
+      }
+      probs[1] <- 1 - sum(probs[2:n_categories])  # Ensure probabilities sum to 1
+      response <- sample(options, 1, prob = probs)
+      dataset <- rbind(dataset, data.frame(
+        Performer = p,
+        Criterion = criteria_ids[c],
+        Rater = rater_ids[r],
+        Response = response
+      ))
+    }
+  }
+}
+
+# Introduce misfit for 8 performers
+misfit_performers <- sample(performer_ids, n_misfit)
+for (p in misfit_performers) {
+  # Randomize 50% of responses for misfitting performers
+  p_rows <- which(dataset$Performer == p)
+  random_rows <- sample(p_rows, length(p_rows) * 0.5)
+  dataset$Response[random_rows] <- sample(options, length(random_rows), replace = TRUE, prob = rep(0.25, 4))
+}
+
+# Save dataset to CSV
+write.csv(dataset, "mfrm_drf_dataset.csv", row.names = FALSE)
+
+# Create facet info data frame
+facet_info <- data.frame(
+  Facet = c(rep("Performer", n_performers), rep("Criterion", n_criteria), rep("Rater", n_raters)),
+  ID = c(performer_ids, criteria_ids, rater_ids),
+  Domain = c(rep(NA, n_performers), domains, rep(NA, n_raters)),
+  DRF = c(rep("No", n_performers), ifelse(1:n_criteria %in% drf_items, "Yes", "No"), 
+          ifelse(rater_ids %in% drf_raters, "Yes", "No"))
+)
+write.csv(facet_info, "mfrm_drf_facet_info.csv", row.names = FALSE)
+
+# Display first few rows
+head(dataset)
+
+# Display summary of responses
+summary(factor(dataset$Response))
+
+# Convert responses to numeric for MFRM analysis (A=0, B=1, C=2, D=3)
+dataset$Response_numeric <- as.numeric(factor(dataset$Response, levels = c("A", "B", "C", "D"))) - 1
+
+# MFRM analysis using the TAM package
+if (!require(TAM)) install.packages("TAM")
+library(TAM)
+
+# Create response array for TAM
+response_array <- array(NA, dim = c(n_performers, n_criteria, n_raters),
+                        dimnames = list(performer_ids, criteria_ids, rater_ids))
+for (i in 1:nrow(dataset)) {
+  p <- dataset$Performer[i]
+  c <- dataset$Criterion[i]
+  r <- dataset$Rater[i]
+  response_array[p, c, r] <- dataset$Response_numeric[i]
+}
+
+# Fit MFRM with Rater x Item interaction for DRF analysis
+mfrm_model <- tam.mml.3pl(resp = response_array, 
+                          facets = data.frame(Rater = dataset$Rater),
+                          formulaA = ~ item + rater + item:rater,
+                          irtmodel = "RSM")
+
+# Person fit analysis
+person_fit <- tam.personfit(mfrm_model)
+infit <- person_fit$infitPerson
+outfit <- person_fit$outfitPerson
+
+# Identify misfitting performers (infit/outfit > 1.5 or < 0.5)
+misfit_persons <- which(infit > 1.5 | infit < 0.5 | outfit > 1.5 | outfit < 0.5)
+cat("Number of misfitting performers:", length(misfit_persons), "\n")
+cat("Misfitting performer indices:", misfit_persons, "\n")
+
+# Facet estimates
+cat("Performer Abilities (first 10):\n")
+print(head(mfrm_model$person$EAP, 10))
+cat("Criteria Difficulties (first 10):\n")
+print(head(mfrm_model$item$xsi.item, 10))
+cat("Rater Severities (first 10):\n")
+print(head(mfrm_model$xsi[grepl("rater", mfrm_model$xsi$parameter), ], 10))
+cat("Category Thresholds:\n")
+print(mfrm_model$xsi[grepl("tau", mfrm_model$xsi$parameter), ])
+
+# Check category usage
+cat("Category Frequencies:\n")
+table(dataset$Response_numeric)
+
+# DRF analysis (inspect rater:item interaction terms)
+drf_terms <- mfrm_model$xsi[grepl("item:rater", mfrm_model$xsi$parameter), ]
+cat("Rater x Item Interaction Terms (DRF, first 10):\n")
+print(head(drf_terms, 10))
+
+# Domain score summaries (sum of numeric responses per domain)
+dataset$Domain <- domains[match(dataset$Criterion, criteria_ids)]
+domain_scores <- aggregate(Response_numeric ~ Performer + Domain, data = dataset, sum)
+domain_scores_wide <- reshape(domain_scores, idvar = "Performer", timevar = "Domain", direction = "wide")
+cat("Domain Score Summaries:\n")
+summary(domain_scores_wide[, -1])
