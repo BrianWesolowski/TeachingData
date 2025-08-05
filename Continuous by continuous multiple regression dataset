@@ -1,0 +1,28 @@
+# Set seed for reproducibility
+set.seed(456)
+
+# Create dataset with 100 observations
+n <- 100
+dataset <- data.frame(
+  Predictor1 = rnorm(n, mean = 60, sd = 12),  # Continuous predictor (normal)
+  Predictor2 = runif(n, min = 10, max = 90),  # Continuous predictor (uniform)
+  Outcome = numeric(n)                         # Continuous outcome
+)
+
+# Generate outcome with linear relationship to predictors
+dataset$Outcome <- 20 + 0.5 * dataset$Predictor1 + 0.3 * dataset$Predictor2 + rnorm(n, mean = 0, sd = 8)
+
+# Round values to 2 decimal places
+dataset <- round(dataset, 2)
+
+# Save dataset to CSV
+write.csv(dataset, "regression_dataset.csv", row.names = FALSE)
+
+# Display first few rows
+head(dataset)
+
+# Display summary statistics
+summary(dataset)
+
+# Display correlation matrix
+cor(dataset)
