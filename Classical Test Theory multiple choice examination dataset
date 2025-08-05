@@ -1,0 +1,106 @@
+# Set seed for reproducibility
+set.seed(505)
+
+# Parameters
+n_examinees <- 200  # Number of examinees
+n_items <- 100      # Total number of items
+options <- c("A", "B", "C", "D")  # Response options
+
+# Create a matrix to store responses
+dataset <- matrix(NA, nrow = n_examinees, ncol = n_items)
+
+# Define domain structure
+domains <- rep(c("Domain1", "Domain2", "Domain3", "Domain4"), each = 25)
+item_names <- paste0("Item", 1:n_items)
+
+# Generate responses with varying item difficulties and domain-specific abilities
+# Simulate latent ability for each examinee (theta) for each domain
+theta_domain1 <- rnorm(n_examinees, mean = 0, sd = 1)
+theta_domain2 <- rnorm(n_examinees, mean = 0, sd = 1) * 0.8 + theta_domain1 * 0.2  # Some correlation
+theta_domain3 <- rnorm(n_examinees, mean = 0, sd = 1) * 0.7 + theta_domain1 * 0.3  # Some correlation
+theta_domain4 <- rnorm(n_examinees, mean = 0, sd = 1) * 0.6 + theta_domain1 * 0.4  # Some correlation
+
+# Item difficulties (logit scale, normally distributed)
+item_difficulties <- rnorm(n_items, mean = 0, sd = 1)
+
+# Generate responses using a simple logistic model
+for (i in 1:n_items) {
+  # Select appropriate theta based on domain
+  if (i <= 25) {
+    theta <- theta_domain1
+  } else if (i <= 50) {
+    theta <- theta_domain2
+  } else if (i <= 75) {
+    theta <- theta_domain3
+  } else {
+    theta <- theta_domain4
+  }
+  
+  # Probability of selecting each option
+  probs <- matrix(0, nrow = n_examinees, ncol = 4)
+  for (j in 1:n_examinees) {
+    # Logistic model for correct response (assume "A" is correct for simplicity)
+    p_correct <- 1 / (1 + exp(-(theta[j] - item_difficulties[i])))
+    # Distribute remaining probability across distractors
+    probs[j, ] <- c(p_correct, (1 - p_correct) / 3, (1 - p_correct) / 3, (1 - p_correct) / 3)
+  }
+  
+  # Generate responses
+  for (j in 1:n_examinees) {
+    dataset[j, i] <- sample(options, 1, prob = probs[j, ])
+  }
+}
+
+# Convert to data frame
+dataset <- as.data.frame(dataset)
+colnames(dataset) <- item_names
+
+# Add domain labels for reference
+item_info <- data.frame(
+  Item = item_names,
+  Domain = domains
+)
+
+# Save dataset to CSV
+write.csv(dataset, "CTT_dataset.csv", row.names = FALSE)
+write.csv(item_info, "CTT_item_info.csv", row.names = FALSE)
+
+# Display first few rows
+head(dataset[, 1:10])  # Show first 10 items for brevity
+
+# Display summary of responses
+summary(dataset)
+
+# Basic CTT analysis: Convert to binary (A = 1, others = 0) for simplicity
+binary_dataset <- as.data.frame(lapply(dataset, function(x) ifelse(x == "A", 1, 0)))
+
+# Calculate item difficulties (proportion correct)
+item_difficulty <- colMeans(binary_dataset)
+
+# Calculate domain scores (sum of correct responses per domain)
+domain_scores <- data.frame(
+  Domain1 = rowSums(binary_dataset[, 1:25]),
+  Domain2 = rowSums(binary_dataset[, 26:50]),
+  Domain3 = rowSums(binary_dataset[, 51:75]),
+  Domain4 = rowSums(binary_dataset[, 76:100])
+)
+
+# Display item difficulties and domain score summaries
+print("Item Difficulties (Proportion Correct):")
+summary(item_difficulty)
+print("Domain Score Summaries:")
+summary(domain_scores)
+
+# Calculate Cronbach's alpha for each domain (requires psych package)
+if (!require(psych)) install.packages("psych")
+library(psych)
+alpha_domain1 <- alpha(binary_dataset[, 1:25])$total$std.alpha
+alpha_domain2 <- alpha(binary_dataset[, 26:50])$total$std.alpha
+alpha_domain3 <- alpha(binary_dataset[, 51:75])$total$std.alpha
+alpha_domain4 <- alpha(binary_dataset[, 76:100])$total$std.alpha
+
+print("Cronbach's Alpha by Domain:")
+cat("Domain1:", alpha_domain1, "\n")
+cat("Domain2:", alpha_domain2, "\n")
+cat("Domain3:", alpha_domain3, "\n")
+cat("Domain4:", alpha_domain4, "\n")
