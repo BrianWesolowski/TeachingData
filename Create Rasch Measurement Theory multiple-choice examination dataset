@@ -1,0 +1,94 @@
+# Set seed for reproducibility
+set.seed(707)
+
+# Parameters
+n_respondents <- 100  # Number of respondents
+n_items <- 100       # Number of items
+options <- c("A", "B", "C", "D")  # Response options
+n_misfit <- 8        # Number of respondents who misfit the Rasch model
+
+# Define domain structure
+domains <- rep(c("Domain1", "Domain2", "Domain3", "Domain4"), each = 25)
+item_names <- paste0("Item", 1:n_items)
+
+# Simulate respondent abilities (theta) and item difficulties (beta)
+theta <- rnorm(n_respondents, mean = 0, sd = 1)  # Respondent abilities (logit scale)
+beta <- rnorm(n_items, mean = 0, sd = 1)        # Item difficulties (logit scale)
+
+# Create a matrix to store responses
+dataset <- matrix(NA, nrow = n_respondents, ncol = n_items)
+
+# Generate Rasch model responses (A is correct, others incorrect)
+for (i in 1:n_items) {
+  for (j in 1:n_respondents) {
+    # Rasch model probability of correct response
+    p_correct <- 1 / (1 + exp(-(theta[j] - beta[i])))
+    # Probability of selecting each option (A is correct)
+    probs <- c(p_correct, (1 - p_correct) / 3, (1 - p_correct) / 3, (1 - p_correct) / 3)
+    dataset[j, i] <- sample(options, 1, prob = probs)
+  }
+}
+
+# Introduce misfit for 8 respondents
+misfit_indices <- sample(1:n_respondents, n_misfit)
+for (j in misfit_indices) {
+  # Create aberrant response patterns (e.g., random guessing or systematic errors)
+  # For simplicity, misfitting respondents answer randomly for 50% of items
+  random_items <- sample(1:n_items, n_items * 0.5)
+  dataset[j, random_items] <- sample(options, length(random_items), replace = TRUE, prob = rep(0.25, 4))
+}
+
+# Convert to data frame
+dataset <- as.data.frame(dataset)
+colnames(dataset) <- item_names
+
+# Create item info data frame
+item_info <- data.frame(
+  Item = item_names,
+  Domain = domains
+)
+
+# Save dataset and item info to CSV
+write.csv(dataset, "rasch_dataset.csv", row.names = FALSE)
+write.csv(item_info, "rasch_item_info.csv", row.names = FALSE)
+
+# Display first few rows
+head(dataset[, 1:10])  # Show first 10 items for brevity
+
+# Display summary of responses
+summary(dataset)
+
+# Convert to binary for Rasch analysis (A = 1, others = 0)
+binary_dataset <- as.data.frame(lapply(dataset, function(x) ifelse(x == "A", 1, 0)))
+
+# Basic Rasch analysis using the eRm package
+if (!require(eRm)) install.packages("eRm")
+library(eRm)
+
+# Fit Rasch model
+rasch_model <- RM(binary_dataset)
+
+# Person fit analysis (infit and outfit statistics)
+person_fit <- personfit(rasch_model)
+infit_msq <- person_fit$p.infitMSQ
+outfit_msq <- person_fit$p.outfitMSQ
+
+# Identify misfitting respondents (infit/outfit MSQ > 1.5 or < 0.5)
+misfit_persons <- which(infit_msq > 1.5 | infit_msq < 0.5 | outfit_msq > 1.5 | outfit_msq < 0.5)
+cat("Number of misfitting respondents:", length(misfit_persons), "\n")
+cat("Misfitting respondent indices:", misfit_persons, "\n")
+
+# Item difficulties
+item_diff <- rasch_model$betapar
+cat("Item Difficulties (first 10):\n")
+print(head(-item_diff, 10))  # Negative for conventional difficulty interpretation
+
+# Domain score summaries (sum of correct responses per domain)
+domain_scores <- data.frame(
+  Domain1 = rowSums(binary_dataset[, 1:25]),
+  Domain2 = rowSums(binary_dataset[, 26:50]),
+  Domain3 = rowSums(binary_dataset[, 51:75]),
+  Domain4 = rowSums(binary_dataset[, 76:100])
+)
+cat("Domain Score Summaries:\n")
+summary(domain_scores)
