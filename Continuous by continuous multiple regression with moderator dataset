@@ -1,0 +1,34 @@
+# Set seed for reproducibility
+set.seed(789)
+
+# Create dataset with 100 observations
+n <- 100
+dataset <- data.frame(
+  Predictor1 = rnorm(n, mean = 50, sd = 10),  # Continuous predictor (normal)
+  Predictor2 = runif(n, min = 20, max = 80),  # Continuous predictor/moderator (uniform)
+  Outcome = numeric(n)                        # Continuous outcome
+)
+
+# Generate outcome with main effects and interaction
+dataset$Outcome <- 15 + 0.4 * dataset$Predictor1 + 0.3 * dataset$Predictor2 + 
+                   0.02 * dataset$Predictor1 * dataset$Predictor2 + 
+                   rnorm(n, mean = 0, sd = 6)
+
+# Round values to 2 decimal places
+dataset <- round(dataset, 2)
+
+# Save dataset to CSV
+write.csv(dataset, "moderation_dataset.csv", row.names = FALSE)
+
+# Display first few rows
+head(dataset)
+
+# Display summary statistics
+summary(dataset)
+
+# Display correlation matrix
+cor(dataset)
+
+# Verify interaction effect with regression
+model <- lm(Outcome ~ Predictor1 * Predictor2, data = dataset)
+summary(model)
