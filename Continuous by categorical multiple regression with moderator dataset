@@ -1,0 +1,37 @@
+# Set seed for reproducibility
+set.seed(202)
+
+# Create dataset with 100 observations
+n <- 100
+dataset <- data.frame(
+  Continuous_Predictor = rnorm(n, mean = 50, sd = 12),       # Continuous predictor (normal)
+  Categorical_Predictor = sample(c("Level1", "Level2"), n, replace = TRUE, prob = c(0.5, 0.5)), # Categorical predictor (2 levels)
+  Outcome = numeric(n)                                        # Continuous outcome
+)
+
+# Generate outcome with main effects and interaction
+# Level1 is reference; Level2 modifies the effect of Continuous_Predictor
+dataset$Outcome <- 10 + 0.5 * dataset$Continuous_Predictor + 
+                   ifelse(dataset$Categorical_Predictor == "Level2", 15, 0) + 
+                   ifelse(dataset$Categorical_Predictor == "Level2", 0.3 * dataset$Continuous_Predictor, 0) + 
+                   rnorm(n, mean = 0, sd = 7)
+
+# Round continuous variables to 2 decimal places
+dataset$Continuous_Predictor <- round(dataset$Continuous_Predictor, 2)
+dataset$Outcome <- round(dataset$Outcome, 2)
+
+# Save dataset to CSV
+write.csv(dataset, "moderation_mixed_dataset.csv", row.names = FALSE)
+
+# Display first few rows
+head(dataset)
+
+# Display summary statistics
+summary(dataset)
+
+# Display correlation for continuous variables
+cor(dataset[, c("Continuous_Predictor", "Outcome")])
+
+# Verify regression model with interaction
+model <- lm(Outcome ~ Continuous_Predictor * Categorical_Predictor, data = dataset)
+summary(model)
