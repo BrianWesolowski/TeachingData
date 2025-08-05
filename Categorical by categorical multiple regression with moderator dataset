@@ -1,0 +1,39 @@
+# Set seed for reproducibility
+set.seed(404)
+
+# Create dataset with 200 observations
+n <- 200
+dataset <- data.frame(
+  Categorical_Predictor1 = sample(c("A", "B", "C", "D"), n, replace = TRUE, prob = c(0.25, 0.25, 0.25, 0.25)), # 4 levels
+  Categorical_Predictor2 = sample(c("X", "Y"), n, replace = TRUE, prob = c(0.5, 0.5)),                           # 2 levels (moderator)
+  Outcome = numeric(n)                                                                                           # Continuous outcome
+)
+
+# Generate outcome with main effects and interaction
+# Categorical_Predictor1: A is reference, B/C/D have different effects
+# Categorical_Predictor2: X is reference, Y modifies effects of Predictor1
+dataset$Outcome <- 20 + 
+                   ifelse(dataset$Categorical_Predictor1 == "B", 10, 0) + 
+                   ifelse(dataset$Categorical_Predictor1 == "C", 20, 0) + 
+                   ifelse(dataset$Categorical_Predictor1 == "D", 30, 0) + 
+                   ifelse(dataset$Categorical_Predictor2 == "Y", 15, 0) + 
+                   ifelse(dataset$Categorical_Predictor2 == "Y" & dataset$Categorical_Predictor1 == "B", 8, 0) + 
+                   ifelse(dataset$Categorical_Predictor2 == "Y" & dataset$Categorical_Predictor1 == "C", 12, 0) + 
+                   ifelse(dataset$Categorical_Predictor2 == "Y" & dataset$Categorical_Predictor1 == "D", 18, 0) + 
+                   rnorm(n, mean = 0, sd = 8)
+
+# Round outcome to 2 decimal places
+dataset$Outcome <- round(dataset$Outcome, 2)
+
+# Save dataset to CSV
+write.csv(dataset, "categorical_moderation_dataset.csv", row.names = FALSE)
+
+# Display first few rows
+head(dataset)
+
+# Display summary statistics
+summary(dataset)
+
+# Verify regression model with interaction
+model <- lm(Outcome ~ Categorical_Predictor1 * Categorical_Predictor2, data = dataset)
+summary(model)
