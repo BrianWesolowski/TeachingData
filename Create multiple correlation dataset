@@ -1,0 +1,29 @@
+# Set seed for reproducibility
+set.seed(123)
+
+# Create dataset with 100 observations and 5 continuous variables
+n <- 100
+dataset <- data.frame(
+  Var1 = rnorm(n, mean = 50, sd = 10),  # Normally distributed
+  Var2 = runif(n, min = 20, max = 80),  # Uniformly distributed
+  Var3 = rnorm(n, mean = 100, sd = 15), # Normally distributed
+  Var4 = rexp(n, rate = 0.05),          # Exponentially distributed
+  Var5 = rnorm(n, mean = 30, sd = 5)    # Normally distributed
+)
+
+# Introduce some correlation between variables
+dataset$Var1 <- dataset$Var1 + 0.4 * dataset$Var2 + 0.3 * dataset$Var3
+dataset$Var4 <- dataset$Var4 + 0.2 * dataset$Var1
+dataset$Var5 <- dataset$Var5 + 0.3 * dataset$Var2
+
+# Round values to 2 decimal places
+dataset <- round(dataset, 2)
+
+# Save dataset to CSV
+write.csv(dataset, "continuous_dataset.csv", row.names = FALSE)
+
+# Display first few rows
+head(dataset)
+
+# Display correlation matrix
+cor(dataset)
