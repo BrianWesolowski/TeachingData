@@ -1,0 +1,151 @@
+# Set seed for reproducibility
+set.seed(1010)
+
+# Parameters
+n_performers <- 120  # Number of students (performers)
+n_criteria <- 30     # Number of criteria (items)
+n_raters <- 20       # Number of raters (calculated based on overlap)
+n_categories <- 4    # Rating scale categories (A, B, C, D)
+options <- c("A", "B", "C", "D")  # Response categories
+performers_per_rater <- 6  # Performances per rater
+overlap <- 3               # Overlap between consecutive raters
+n_misfit <- 8             # Number of misfitting performers
+
+# Define facet labels
+performer_ids <- paste0("P", 1:n_performers)
+criteria_ids <- paste0("C", 1:n_criteria)
+rater_ids <- paste0("R", 1:n_raters)
+
+# Generate rater assignments with overlap
+rater_assignments <- list()
+for (r in 1:n_raters) {
+  start <- 1 + (r - 1) * (performers_per_rater - overlap)
+  end <- start + performers_per_rater - 1
+  if (end > n_performers) {
+    end <- n_performers
+    start <- end - performers_per_rater + 1
+  }
+  rater_assignments[[r]] <- performer_ids[start:end]
+}
+names(rater_assignments) <- rater_ids
+
+# Simulate facet parameters
+theta <- rnorm(n_performers, mean = 0, sd = 1)  # Performer abilities (logit scale)
+beta <- rnorm(n_criteria, mean = 0, sd = 0.8)   # Criteria difficulties (logit scale)
+gamma <- rnorm(n_raters, mean = 0, sd = 0.5)    # Rater severities (logit scale)
+
+# Define rating scale thresholds (shared across criteria for RSM)
+# Thresholds are closely spaced to warrant collapsing
+thresholds <- c(-0.4, 0.2, 0.7)  # Thresholds between A-B, B-C, C-D (logit scale)
+
+# Create dataset (long format for MFRM)
+dataset <- data.frame(
+  Performer = character(),
+  Criterion = character(),
+  Rater = character(),
+  Response = character(),
+  stringsAsFactors = FALSE
+)
+
+# Generate responses using MFRM (Rating Scale Model variant)
+for (r in 1:n_raters) {
+  performers <- rater_assignments[[r]]
+  for (p in performers) {
+    p_idx <- which(performer_ids == p)
+    for (c in 1:n_criteria) {
+      # Calculate logit score (MFRM: theta - beta - gamma)
+      eta <- theta[p_idx] - beta[c] - gamma[r]
+      # Probabilities for each category
+      probs <- numeric(n_categories)
+      for (k in 1:n_categories) {
+        num <- exp(sum(thresholds[1:(k-1)] - eta))
+        denom <- sum(exp(cumsum(thresholds - eta)))
+        probs[k] <- num / (1 + denom)
+      }
+      probs[1] <- 1 - sum(probs[2:n_categories])  # Ensure probabilities sum to 1
+      response <- sample(options, 1, prob = probs)
+      dataset <- rbind(dataset, data.frame(
+        Performer = p,
+        Criterion = criteria_ids[c],
+        Rater = rater_ids[r],
+        Response = response
+      ))
+    }
+  }
+}
+
+# Introduce misfit for 8 performers
+misfit_performers <- sample(performer_ids, n_misfit)
+for (p in misfit_performers) {
+  # Randomize 50% of responses for misfitting performers
+  p_rows <- which(dataset$Performer == p)
+  random_rows <- sample(p_rows, length(p_rows) * 0.5)
+  dataset$Response[random_rows] <- sample(options, length(random_rows), replace = TRUE, prob = rep(0.25, 4))
+}
+
+# Save dataset to CSV
+write.csv(dataset, "mfrm_dataset.csv", row.names = FALSE)
+
+# Create facet info data frame
+facet_info <- data.frame(
+  Facet = c(rep("Performer", n_performers), rep("Criterion", n_criteria), rep("Rater", n_raters)),
+  ID = c(performer_ids, criteria_ids, rater_ids)
+)
+write.csv(facet_info, "mfrm_facet_info.csv", row.names = FALSE)
+
+# Display first few rows
+head(dataset)
+
+# Display summary of responses
+summary(as.factor(dataset$Response))
+
+# Convert responses to numeric for MFRM analysis (A=0, B=1, C=2, D=3)
+dataset$Response_numeric <- as.numeric(factor(dataset$Response, levels = c("A", "B", "C", "D"))) - 1
+
+# MFRM analysis using the TAM package
+if (!require(TAM)) install.packages("TAM")
+library(TAM)
+
+# Create response matrix (wide format for TAM)
+response_matrix <- xtabs(Response_numeric ~ Performer + Criterion + Rater, data = dataset)
+response_array <- array(NA, dim = c(n_performers, n_criteria, n_raters),
+                        dimnames = list(performer_ids, criteria_ids, rater_ids))
+for (i in 1:nrow(dataset)) {
+  p <- dataset$Performer[i]
+  c <- dataset$Criterion[i]
+  r <- dataset$Rater[i]
+  response_array[p, c, r] <- dataset$Response_numeric[i]
+}
+
+# Fit MFRM (Rating Scale Model)
+facets <- list("step" = response_array)  # TAM expects a list for polytomous data
+mfrm_model <- tam.mml.3pl(resp = facets$step, group = NULL, 
+                          formulaA = ~ item + rater, irtmodel = "RSM")
+
+# Person fit analysis (approximate, using TAM person fit)
+person_fit <- tam.personfit(mfrm_model)
+infit <- person_fit$infitPerson
+outfit <- person_fit$outfitPerson
+
+# Identify misfitting performers (infit/outfit > 1.5 or < 0.5)
+misfit_persons <- which(infit > 1.5 | infit < 0.5 | outfit > 1.5 | outfit < 0.5)
+cat("Number of misfitting performers:", length(misfit_persons), "\n")
+cat("Misfitting performer indices:", misfit_persons, "\n")
+
+# Item difficulties and rater severities
+cat("Criteria Difficulties (first 10):\n")
+print(head(mfrm_model$item$xsi.item, 10))
+cat("Rater Severities (first 10):\n")
+print(head(mfrm_model$rater$xsi.rater, 10))
+cat("Category Thresholds:\n")
+print(mfrm_model$xsi[grepl("tau", mfrm_model$xsi$parameter), ])
+
+# Check category usage
+cat("Category Frequencies:\n")
+table(dataset$Response_numeric)
+
+# Domain score summaries (sum of numeric responses per domain)
+dataset$Domain <- rep(domains, times = nrow(dataset) / n_criteria)
+domain_scores <- aggregate(Response_numeric ~ Performer + Domain, data = dataset, sum)
+cat("Domain Score Summaries:\n")
+summary(domain_scores)
