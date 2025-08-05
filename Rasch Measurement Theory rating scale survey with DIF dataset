@@ -1,0 +1,137 @@
+# Set seed for reproducibility
+set.seed(910)
+
+# Parameters
+n_respondents <- 200  # Number of respondents
+n_items <- 100       # Number of items
+options <- c("A", "B", "C", "D")  # Response categories
+n_misfit <- 8        # Number of respondents who misfit the Rasch model
+n_dif_items <- 20    # Number of items with DIF (5 per domain)
+
+# Define domain structure and DIF items
+domains <- rep(c("Domain1", "Domain2", "Domain3", "Domain4"), each = 25)
+item_names <- paste0("Item", 1:n_items)
+dif_items <- c(sample(1:25, 5), sample(26:50, 5), sample(51:75, 5), sample(76:100, 5))  # 5 DIF items per domain
+
+# Create gender variable (Male/Female, balanced)
+gender <- sample(c("Male", "Female"), n_respondents, replace = TRUE, prob = c(0.5, 0.5))
+
+# Simulate respondent abilities (theta) and item difficulties (beta)
+theta <- rnorm(n_respondents, mean = 0, sd = 1)  # Respondent abilities (logit scale)
+beta <- rnorm(n_items, mean = 0, sd = 1)        # Base item difficulties (logit scale)
+
+# Introduce DIF: Adjust item difficulties for Female group
+beta_female <- beta
+dif_effect <- 0.8  # DIF effect size (logit scale, Female group has higher difficulty)
+beta_female[dif_items] <- beta[dif_items] + dif_effect
+
+# Define rating scale thresholds (shared across items for RSM)
+# Thresholds are closely spaced to warrant collapsing
+thresholds <- c(-0.5, 0.1, 0.6)  # Thresholds between A-B, B-C, C-D (logit scale)
+
+# Create a matrix to store responses
+dataset <- matrix(NA, nrow = n_respondents, ncol = n_items)
+
+# Generate RSM responses with DIF
+for (i in 1:n_items) {
+  for (j in 1:n_respondents) {
+    # Select appropriate difficulty based on gender
+    beta_current <- ifelse(gender[j] == "Female", beta_female[i], beta[i])
+    # Logits for each category based on RSM
+    logits <- c(0, cumsum(exp(thresholds)))  # Cumulative probabilities
+    logits <- logits / sum(logits)           # Normalize to probabilities
+    eta <- theta[j] - beta_current           # Person-item difference
+    probs <- numeric(4)
+    for (k in 1:4) {
+      num <- exp(sum(thresholds[1:(k-1)] - eta))
+      denom <- sum(exp(cumsum(thresholds - eta)))
+      probs[k] <- num / (1 + denom)
+    }
+    probs[1] <- 1 - sum(probs[2:4])  # Ensure probabilities sum to 1
+    dataset[j, i] <- sample(options, 1, prob = probs)
+  }
+}
+
+# Introduce misfit for 8 respondents
+misfit_indices <- sample(1:n_respondents, n_misfit)
+for (j in misfit_indices) {
+  # Create aberrant response patterns (random guessing for 50% of items)
+  random_items <- sample(1:n_items, n_items * 0.5)
+  dataset[j, random_items] <- sample(options, length(random_items), replace = TRUE, prob = rep(0.25, 4))
+}
+
+# Convert to data frame and add gender
+dataset <- as.data.frame(dataset)
+colnames(dataset) <- item_names
+dataset$Gender <- gender
+
+# Create item info data frame
+item_info <- data.frame(
+  Item = item_names,
+  Domain = domains,
+  DIF = ifelse(1:n_items %in% dif_items, "Yes", "No")
+)
+
+# Save dataset and item info to CSV
+write.csv(dataset, "rsm_dif_dataset.csv", row.names = FALSE)
+write.csv(item_info, "rsm_dif_item_info.csv", row.names = FALSE)
+
+# Display first few rows
+head(dataset[, c(1:10, ncol(dataset))])  # Show first 10 items and Gender
+
+# Display summary of responses and gender
+summary(dataset)
+
+# Convert to numeric for RSM analysis (A=0, B=1, C=2, D=3)
+numeric_dataset <- as.data.frame(lapply(dataset[, 1:n_items], function(x) as.numeric(factor(x, levels = c("A", "B", "C", "D"))) - 1))
+
+# RSM analysis using the TAM package
+if (!require(TAM)) install.packages("TAM")
+library(TAM)
+
+# Fit Rating Scale Model
+rsm_model <- tam.mml(numeric_dataset, irtmodel = "RSM")
+
+# Person fit analysis (infit and outfit statistics)
+person_fit <- tam.personfit(rsm_model)
+infit <- person_fit$infitPerson
+outfit <- person_fit$outfitPerson
+
+# Identify misfitting respondents (infit/outfit > 1.5 or < 0.5)
+misfit_persons <- which(infit > 1.5 | infit < 0.5 | outfit > 1.5 | outfit < 0.5)
+cat("Number of misfitting respondents:", length(misfit_persons), "\n")
+cat("Misfitting respondent indices:", misfit_persons, "\n")
+
+# Item difficulties and thresholds
+cat("Item Difficulties (first 10):\n")
+print(head(rsm_model$item$xsi.item, 10))
+cat("Category Thresholds:\n")
+print(rsm_model$xsi[rsm_model$xsi$parameter %in% paste0("tau", 1:3), ])
+
+# Check category usage and threshold ordering
+cat("Category Frequencies:\n")
+table(unlist(numeric_dataset))
+
+# DIF analysis using lordif package
+if (!require(lordif)) install.packages("lordif")
+library(lordif)
+
+# Run DIF analysis (logistic regression approach)
+dif_analysis <- lordif(numeric_dataset, group = dataset$Gender, criterion = "Chisqr")
+cat("Items with DIF (based on lordif):\n")
+print(dif_analysis$stats[dif_analysis$stats$flag, ])
+
+# Plot DIF for a sample DIF item
+if (length(dif_items) > 0) {
+  plot(dif_analysis, item = dif_items[1], main = paste("DIF Plot for Item", dif_items[1]))
+}
+
+# Domain score summaries (sum of numeric responses per domain)
+domain_scores <- data.frame(
+  Domain1 = rowSums(numeric_dataset[, 1:25]),
+  Domain2 = rowSums(numeric_dataset[, 26:50]),
+  Domain3 = rowSums(numeric_dataset[, 51:75]),
+  Domain4 = rowSums(numeric_dataset[, 76:100])
+)
+cat("Domain Score Summaries:\n")
+summary(domain_scores)
